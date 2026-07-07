@@ -61,6 +61,28 @@ def displayMetrics(md):
     print(f"Final test accuracy: {accuracy_score(md.y_test, md.y_pred):.4f}")
 
 
+def plotLoopAccuracies(md, loop_accuracies, teacher_acc):
+    if not loop_accuracies:
+        return
+
+    plt.figure(figsize=(10, 6))
+    loops = np.arange(1, len(loop_accuracies) + 1)
+    plt.scatter(loops, loop_accuracies, s=35, label="Student OOB Accuracy")
+    if len(loop_accuracies) > 1:
+        slope, intercept = np.polyfit(loops, loop_accuracies, 1)
+        trend = slope * loops + intercept
+        plt.plot(loops, trend, color="tab:green", linewidth=2, label="Regression Line")
+    plt.axhline(teacher_acc, color="tab:orange", linestyle="--", linewidth=1.5, label="Teacher OOB Accuracy")
+    plt.title("OOB Accuracy by Training Loop")
+    plt.xlabel("Loop")
+    plt.ylabel("Accuracy")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+    starttime = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    plt.savefig(md.name + ".loopacc." + starttime + ".png", dpi=300, bbox_inches="tight")
+
+
 def make_rf(seed):
     return RandomForestClassifier(
         n_estimators=60,
@@ -126,6 +148,7 @@ def teacherStudentLoop(md):
     print(f"Teacher OOB accuracy: {prev_acc:.4f}")
     best_model = teacher
     best_acc = prev_acc
+    loop_accuracies = []
 
     for loop in range(max_loops):
         X_unlab_aug = augmentations.weakAugment(md.X_unlab, seed=42 + loop)
@@ -143,6 +166,7 @@ def teacherStudentLoop(md):
         student = make_rf(seed=42 + loop + 1)
         student.fit(X_combined, y_combined, sample_weight=sample_weight)
         acc = student.oob_score_
+        loop_accuracies.append(acc)
         delta = acc - prev_acc
         improved = acc > best_acc
         print(
@@ -159,6 +183,7 @@ def teacherStudentLoop(md):
            # print(f" Converged: |delta| < {min_improvement}. Stopping.")
             #break
 
+    plotLoopAccuracies(md, loop_accuracies, teacher.oob_score_)
     md.y_pred = best_model.predict(md.X_test)
     return md, best_model
 
